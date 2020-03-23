@@ -1,6 +1,3 @@
-# GaussianBeamPropagation
-A simple library and Jupyter notebook example that can propagate a gaussian laser beam through free space and through optical elements using ABCD matrices and the q-parameter. Personally, it is quicker than setting up a zemax file, and allows me to check beam sizes, waist locations, and calculate distances need for collimation optics.
-
 # Gaussian Beam Propagation
 
 ## Import files
@@ -268,6 +265,93 @@ bs.plot(w, d, rang = np.arange(0,1,.01))
 
 ![png](output_16_0.png)
 
+
+### Lets look at how to expand and collimate a beam with a two lens system
+
+
+```python
+w0 = 1E-3 # 1mm beam waist
+lam = 355E-9 # wavelength of 355 nm (UV)
+zR = bs.Zr(w0, lam) # Rayleigh range in m
+z0 = 0 # location of waist in m
+
+d1, d2, d3, f1, f2 = sym.symbols('d1 d2 d3 f1 f2')
+
+M = bs.mult(bs.prop(d3),bs.lens(f2),bs.prop(d2), bs.lens(f1), bs.prop(d1))
+
+R, w = bs.q1_inv_func(0, w0, lam, M)
+```
+
+### For example, lets say the beam travels 1 m before hitting the first lens, and we want the beam to be 5x w0 after coming out of the second lens. We substitute d1 for 1 meter, since the beam propagates 1 meter, and we substitute d3 for 0, since we only care about the beam size right at the second lens. This gives us a relation between f1 and d2 (the separation between the lenses).
+
+
+```python
+w = w.subs(d1,1).subs(d3,0)
+f1_eq = sym.solve(w - 5*w0, f1)[0]
+print('f = {}'.format(f1_eq))
+```
+
+    f = 1.0084642216545e+15*d2*(1.12051580183833e+27*d2 - 4.41556446152598e+29*sqrt(1 - 0.000504320418227052*d2**2) + 8.88733242867719e+28)/(1.13000009595246e+42*d2**2 + 2.26000019190491e+42*d2 - 2.12276362486616e+45)
+    
+
+#### Suppose we wanted the distance between the lenses to be 1 meter, we could find what f1 we need.
+
+
+```python
+print('f1 = {:.2f} m, for a lens separation of 1 meter'.format(f1_eq.subs(d2, 1)))
+```
+
+    f1 = 0.17 m, for a lens separation of 1 meter
+    
+
+### Now we need to collimate the beam. Lets still assume the beam propagates 1 m, and f1 = .17 m.
+
+There are a couple different ways to think about collimation. One is that the beam size doesn't change over a long distance. The other is that the radius of curvature is infinite (i.e. a plane wave). Lets us the latter interpretation. Thus, we want to find the focal length f2 that makes R infinite, or that makes 1/R =0.
+
+
+```python
+R_coll = R.subs(d1,1).subs(d2,1).subs(f1,.17).subs(d3,0)
+f2_coll = sym.solve(1/R_coll,f2)[0]
+print('f2 = {:.2f}, for a collimated beam, 5x the original waist, after propagating 1m to the first lens of f1 = .17m, and propagating another 1m to the second lens'.format(f2_coll))
+```
+
+    f2 = 0.83, for a collimated beam, 5x the original waist, after propagating 1m to the first lens of f1 = .17m, and propagating another 1m to the second lens
+    
+
+### Lets plot the beam profile after the second lens, and see if it is collimated.
+
+
+```python
+M = bs.mult(bs.prop(d3),bs.lens(.83),bs.prop(1), bs.lens(.17), bs.prop(1))
+
+R, w = bs.q1_inv_func(0, w0, lam, M)
+
+bs.plot(w,d3)
+```
+
+
+![png](output_27_0.png)
+
+
+### Looks very collimated. Lets check the beam size (to make sure its 5* w0) and check the collimation
+
+
+```python
+expansion_factor = w.subs(d3,0)/ w0
+print('beam is w = {:.2f} x w0'.format(expansion_factor))
+```
+
+    beam is w = 4.90 x w0
+    
+
+
+```python
+beam_size_change = (w.subs(d3,10) - w.subs(d3,0)) / w.subs(d3,0) * 100
+print('Over 10 m after second lens, beam changes by {:.0f}%'.format(beam_size_change))
+```
+
+    Over 10 m after second lens, beam changes by 1%
+    
 
 
 ```python
